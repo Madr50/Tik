@@ -9,7 +9,7 @@ import random
 import os
 import json
 from user_agent import generate_user_agent
-from threading import Thread
+from threading import Thread, Lock
 from rich import print as g
 from rich.panel import Panel
 from cfonts import render, say
@@ -30,9 +30,11 @@ K = '\033[1;35;40m'
 V = '\033[1;36;40m'
 Z = '\033[1;31m'
 G = '\033[1;32m'
+Y = '\033[1;33m'
 
-# Global counters
+# Global counters and Lock for clean printing
 hit, ge, be, gt, bt = 0, 0, 0, 0, 0
+print_lock = Lock()
 
 # User inputs
 try:
@@ -52,11 +54,14 @@ def check_tiktok_email(email_prefix, domain):
     global ge, be, bt, iid, tok
     full_email = f"{email_prefix}@{domain}"
     
+    with print_lock:
+        print(f'{Y}[*] Checking: {C}{full_email}', end='\r')
+        
     try:
-        # Check TikTok user availability
         tiktok_check = AegosPy.CheckTik(full_email)
         if tiktok_check.get("Status") == "OK":
-            print(f'{B}- {X}GooD TikTok {F}: {C}{full_email}')
+            with print_lock:
+                print(f'\n{B}[+] {X}GooD TikTok {F}: {C}{full_email}')
             
             email_check = None
             if domain == 'gmail.com': email_check = AegosPy.A_Gmail(full_email)
@@ -66,7 +71,8 @@ def check_tiktok_email(email_prefix, domain):
             elif domain == 'mail.ru': email_check = AegosPy.A_MailRu(full_email)
 
             if email_check and email_check.get("Status") == "Available":
-                print(f'{B}- {F}GooD {domain.upper()} {X}: {C}{full_email}')
+                with print_lock:
+                    print(f'{G}[!] FOUND HIT: {C}{full_email}')
                 user_info = AegosPy.GetInfoTik(email_prefix)
                 
                 telegram_text = (
@@ -90,7 +96,6 @@ def check_tiktok_email(email_prefix, domain):
         pass
 
 def hso1_merged():
-    global iid, tok
     headers = {
         "User-Agent": generate_user_agent(),
         "Accept": "application/json",
@@ -99,10 +104,12 @@ def hso1_merged():
     
     while True:
         try:
-            # Generate random search term
             search_chars = 'qwertyuiopasdfghjklzxcvbnm'
-            name_search = "".join(random.choice(search_chars) for _ in range(random.randint(2, 5)))
+            name_search = "".join(random.choice(search_chars) for _ in range(random.randint(2, 4)))
             
+            with print_lock:
+                print(f'{V}[~] Searching for users matching: {name_search}...', end='\r')
+                
             search_url = f'https://livecounts.xyz/api/tiktok-live-follower-count/search/{name_search}'
             response = requests.get(search_url, headers=headers, timeout=15)
             
@@ -110,48 +117,45 @@ def hso1_merged():
                 try:
                     data = response.json()
                     if data.get('success') and 'results' in data:
-                        for user_data in data['results']:
+                        results = data['results']
+                        random.shuffle(results)
+                        for user_data in results[:5]: # Check top 5 from each search to stay efficient
                             username = user_data.get('username')
-                            if username and '_' not in username and 5 <= len(username) <= 30:
+                            if username and '_' not in username and 5 <= len(username) <= 20:
                                 for domain in ['gmail.com', 'yahoo.com', 'hotmail.com']:
                                     check_tiktok_email(username, domain)
-                                    time.sleep(0.5)
+                                    time.sleep(1)
                     else:
-                        # If API fails, try a different random search
-                        pass
-                except json.JSONDecodeError:
-                    # This is the error the user saw. It means the site returned something else.
-                    # We will just wait and retry to avoid flooding the console.
-                    time.sleep(10)
+                        time.sleep(2)
+                except:
+                    time.sleep(5)
             elif response.status_code == 403 or response.status_code == 429:
-                # Rate limited or blocked
-                time.sleep(60)
+                time.sleep(30)
             else:
-                time.sleep(10)
+                time.sleep(5)
                 
-        except Exception as e:
-            # Catch other network errors
+        except:
             time.sleep(5)
         
-        # Mandatory sleep to prevent "freezing" or high CPU
-        time.sleep(random.randint(5, 10))
+        time.sleep(random.randint(2, 5))
 
 if __name__ == '__main__':
     os.system('clear')
-    print(f"{X}[{F} ✓ {X}]{C} Starting Tool...")
-    time.sleep(2)
+    print(f"{X}[{F} ✓ {X}]{C} TikTok Multi-Checker Started")
+    print(f"{V}----------------------------------------{C}")
+    time.sleep(1)
 
-    # Use a reasonable number of threads to avoid instant blocking
-    thread_count = 10 
+    thread_count = 5 # Starting with 5 threads for better visibility and stability
     for _ in range(thread_count):
         t = Thread(target=hso1_merged)
         t.daemon = True
         t.start()
 
-    print(f"{G}Running with {thread_count} threads. Check your Telegram bot for hits.{C}")
+    print(f"{G}[+] Running with {thread_count} threads.{C}")
+    print(f"{G}[+] Live status will be shown below...{C}\n")
     
     try:
         while True:
-            time.sleep(10)
+            time.sleep(1)
     except KeyboardInterrupt:
         print("\nExiting...")
