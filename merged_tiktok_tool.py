@@ -42,9 +42,34 @@ def send_msg(text):
         pass
 
 
+def is_valid_for_domain(username, domain):
+    """Check if username is valid for a specific domain's rules."""
+    if domain == 'gmail.com':
+        # Gmail: only a-z, 0-9, and periods (.)
+        # No underscores, no consecutive dots, 6-30 chars
+        if '_' in username: return False
+        if '..' in username: return False
+        clean_name = username.replace('.', '')
+        if len(clean_name) < 6 or len(clean_name) > 30: return False
+        return True
+    
+    if domain in ['yahoo.com', 'hotmail.com', 'aol.com']:
+        # Yahoo/Hotmail: letters, numbers, underscores, periods
+        # Must start with a letter
+        if not username[0].isalpha(): return False
+        if len(username) < 4 or len(username) > 32: return False
+        return True
+
+    return True
+
 def check_one(username, domain):
     """Check single username+domain combo. Returns True if HIT."""
     global stats
+
+    # Domain-specific validation
+    if not is_valid_for_domain(username, domain):
+        return False
+
     email = f"{username}@{domain}"
 
     with lock:
@@ -140,8 +165,10 @@ def generate_single_username():
         "name_only",
         "name_family",
         "name_underscore_family",
+        "name_dot_family",
         "name_number",
         "name_underscore_number",
+        "name_dot_number",
         "initial_name",
         "name_initial"
     ])
@@ -155,12 +182,18 @@ def generate_single_username():
     elif strategy == "name_underscore_family":
         family = random.choice(family_names)
         username = name + "_" + family
+    elif strategy == "name_dot_family":
+        family = random.choice(family_names)
+        username = name + "." + family
     elif strategy == "name_number":
         num = random.choice(numbers)
         username = name + num
     elif strategy == "name_underscore_number":
         num = random.choice(numbers)
         username = name + "_" + num
+    elif strategy == "name_dot_number":
+        num = random.choice(numbers)
+        username = name + "." + num
     elif strategy == "initial_name":
         initial = random.choice('abcdefghijklmnopqrstuvwxyz')
         username = initial + name
@@ -169,7 +202,7 @@ def generate_single_username():
         username = name + initial
 
     username = username.replace(' ', '').lower()
-    username = ''.join(char for char in username if char.isalnum() or char == '_')
+    username = ''.join(char for char in username if char.isalnum() or char in ['_', '.'])
 
     if 3 <= len(username) <= 24 and not username.isdigit():
         return username
