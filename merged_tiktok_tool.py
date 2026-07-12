@@ -114,6 +114,68 @@ def check_one(username, domain):
         return False
 
 
+arabic_names = [
+    "احمد", "محمد", "علي", "فاطمة", "زينب", "يوسف", "مريم", "خالد", "سارة", "نور",
+    "عمر", "حمزة", "ليلى", "هدى", "سعاد", "ابراهيم", "ياسين", "مصطفى", "ليان", "رتاج"
+]
+english_names = [
+    "john", "jane", "mike", "sara", "chris", "emma", "david", "olivia", "daniel", "sophia",
+    "alex", "ryan", "lucas", "mia", "bella", "jack", "leo", "zoe", "luna", "max"
+]
+family_names = [
+    "علي", "محمد", "احمد", "حسن", "حسين", "خالد", "سعيد", "عباس", "يوسف", "ابراهيم",
+    "smith", "jones", "williams", "brown", "davis", "miller", "wilson", "moore", "taylor", "anderson",
+    "العنزي", "العتيبي", "الشمري", "الدوسري", "المطيري", "الحربي", "القحطاني", "الغامدي", "الزهراني", "التميمي"
+]
+numbers = [str(i) for i in range(10, 1000)] # 2-3 digit numbers
+
+def generate_single_username():
+    name_type = random.choice(["arabic", "english"])
+    if name_type == "arabic":
+        name = random.choice(arabic_names)
+    else:
+        name = random.choice(english_names)
+
+    strategy = random.choice([
+        "name_only",
+        "name_family",
+        "name_underscore_family",
+        "name_number",
+        "name_underscore_number",
+        "initial_name",
+        "name_initial"
+    ])
+
+    username = ""
+    if strategy == "name_only":
+        username = name
+    elif strategy == "name_family":
+        family = random.choice(family_names)
+        username = name + family
+    elif strategy == "name_underscore_family":
+        family = random.choice(family_names)
+        username = name + "_" + family
+    elif strategy == "name_number":
+        num = random.choice(numbers)
+        username = name + num
+    elif strategy == "name_underscore_number":
+        num = random.choice(numbers)
+        username = name + "_" + num
+    elif strategy == "initial_name":
+        initial = random.choice('abcdefghijklmnopqrstuvwxyz')
+        username = initial + name
+    elif strategy == "name_initial":
+        initial = random.choice('abcdefghijklmnopqrstuvwxyz')
+        username = name + initial
+
+    username = username.replace(' ', '').lower()
+    username = ''.join(char for char in username if char.isalnum() or char == '_')
+
+    if 3 <= len(username) <= 24 and not username.isdigit():
+        return username
+    else:
+        return generate_single_username() # Regenerate if invalid
+
 def search_loop():
     """Main search loop with weighted short-username priority."""
 
@@ -123,27 +185,18 @@ def search_loop():
         "Referer": "https://livecounts.xyz/"
     }
 
-    charsets = [
-        'qwertyuiopasdfghjklzxcvbnm',
-        'abcdefghijklmnopqrstuvwxyz',
-        'abcdefghijklmnopqrstuvwxyz0123456789',
-    ]
 
-    # Weighted: prioritize 4-7 chars (best API results + realistic email availability)
-    lengths = [3, 4, 5, 6, 7, 8]
-    weights = [0.10, 0.30, 0.30, 0.15, 0.10, 0.05]
+
+
 
     domains = ['gmail.com', 'yahoo.com', 'hotmail.com', 'aol.com', 'mail.ru']
 
     while True:
         try:
-            # Pick length
-            length = random.choices(lengths, weights=weights, k=1)[0]
-            charset = random.choice(charsets)
-            keyword = "".join(random.choice(charset) for _ in range(length))
+            keyword = generate_single_username()
 
             with lock:
-                print(f'{V}[~] Searching: {keyword} ({length} chars)', end='\r')
+                print(f'{V}[~] Generating and searching: {keyword}', end='\r')
 
             # Search
             url = f'https://livecounts.xyz/api/tiktok-live-follower-count/search/{keyword}'
@@ -225,7 +278,7 @@ if __name__ == '__main__':
 
     print(f"{X}[{F}✓{X}]{C} TikTok Email Checker v2")
     print(f"{V}{'─'*40}")
-    print(f" {G}Priority: 2-5 char usernames")
+    print(f" {G}Priority: Smart Name Strategies (Names, Family, Underscores)")
     print(f" {G}Domains: gmail, yahoo, hotmail, aol, mail.ru")
     print(f" {G}Threads: 15 concurrent")
     print(f"{V}{'─'*40}")
