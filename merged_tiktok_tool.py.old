@@ -129,9 +129,9 @@ def search_loop():
         'abcdefghijklmnopqrstuvwxyz0123456789',
     ]
 
-    # Weighted: prioritize 4-7 chars (best API results + realistic email availability)
-    lengths = [3, 4, 5, 6, 7, 8]
-    weights = [0.10, 0.30, 0.30, 0.15, 0.10, 0.05]
+    # Weighted: prioritize 3-4 chars (highest hit rate)
+    lengths = [2, 3, 4, 5, 6, 7]
+    weights = [0.03, 0.37, 0.37, 0.13, 0.07, 0.03]
 
     domains = ['gmail.com', 'yahoo.com', 'hotmail.com', 'aol.com', 'mail.ru']
 
@@ -168,8 +168,8 @@ def search_loop():
                         if not uname:
                             continue
 
-                        # Allow 3-30 chars (3+ is realistic minimum), no digit-only
-                        if len(uname) < 3 or len(uname) > 30:
+                        # Allow 2-30 chars, no digit-only, no pure underscore
+                        if len(uname) < 2 or len(uname) > 30:
                             continue
                         if uname.isdigit():
                             continue

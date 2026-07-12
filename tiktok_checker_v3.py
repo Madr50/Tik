@@ -110,8 +110,8 @@ def run():
 
     while True:
         try:
-            # Weighted: 3 and 4 chars = 74% of searches
-            length = random.choices([2,3,4,5,6],[0.03,0.37,0.37,0.13,0.10], k=1)[0]
+            # Weighted: 4-7 chars = best results
+            length = random.choices([3,4,5,6,7,8],[0.10,0.30,0.30,0.15,0.10,0.05], k=1)[0]
             kw = "".join(random.choice(chars) for _ in range(length))
 
             url = f'https://livecounts.xyz/api/tiktok-live-follower-count/search/{kw}'
@@ -127,7 +127,7 @@ def run():
                         for u in res:
                             if n >= 12: break
                             name = u.get('username','')
-                            if not name or len(name) < 2 or len(name) > 30:
+                            if not name or len(name) < 3 or len(name) > 30:
                                 continue
                             if name.isdigit(): continue
                             for d in doms:
